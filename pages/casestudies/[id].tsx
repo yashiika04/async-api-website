@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import type { MDXRemoteSerializeResult } from 'next-mdx-remote';
 import { MDXRemote } from 'next-mdx-remote';
 import { serialize } from 'next-mdx-remote/serialize';
@@ -159,6 +160,7 @@ const Index: React.FC<IndexProps> = ({
   fullExample,
   additionalResources
 }) => {
+  const router = useRouter();
   const image = '/img/social/website-card.jpg';
   const allComponents = mdxComponents;
   const contacts = casestudy.company.contact;
@@ -195,6 +197,7 @@ const Index: React.FC<IndexProps> = ({
     >
       <div className='max-w-screen lg:flex lg:flex-row-reverse lg:justify-between'>
         <CaseTOC
+          key={router.asPath}
           toc={content}
           cssBreakingPoint='lg'
           className='sticky top-20 mt-4 max-h-screen overflow-y-auto bg-blue-100 p-4 lg:top-24 lg:-mr-14 lg:mt-2 lg:max-h-(screen-16) lg:min-w-[265px] lg:max-w-72 lg:flex-1 lg:border-l lg:border-gray-200 lg:bg-transparent lg:pb-8 lg:pt-0'

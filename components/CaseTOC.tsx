@@ -1,7 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { twMerge } from 'tailwind-merge';
 
-import { useHeadingsObserver } from './helpers/useHeadingsObserver';
 import ArrowRight from './icons/ArrowRight';
 
 interface TocItem {
@@ -143,9 +142,64 @@ function TOCItem({ item, index, currSelected, closeMenu }: TOCItemProps) {
  * @param {any[]} props.toc - The table of contents data.
  */
 export default function CaseTOC({ className, cssBreakingPoint = 'xl', toc }: CaseTOCProps) {
-  const { currActive: selected } = useHeadingsObserver();
+  const [selected, setSelected] = useState<string>('');
   const [open, setOpen] = useState(false);
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tocItems = useMemo(() => convertContentToTocItems(toc), [toc]);
+
+  // Scroll tracking with debouncing for stable highlighting
+  useEffect(() => {
+    const handleScroll = () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+
+      scrollTimeoutRef.current = setTimeout(() => {
+        const STICKY_OFFSET = 120;
+        let closestId: string = '';
+        let closestDistance = Infinity;
+
+        // Flatten all slugs from nested structure
+        const getAllSlugs = (items: TocItem[]): string[] => {
+          let slugs: string[] = [];
+          items.forEach((item) => {
+            slugs.push(item.slug);
+            if (item.children) {
+              slugs = slugs.concat(getAllSlugs(item.children));
+            }
+          });
+          return slugs;
+        };
+
+        const allSlugs = getAllSlugs(tocItems);
+
+        allSlugs.forEach((slug) => {
+          const element = document.getElementById(slug);
+          if (element) {
+            const rect = element.getBoundingClientRect();
+            const distance = Math.abs(rect.top - STICKY_OFFSET);
+
+            if (distance < closestDistance) {
+              closestDistance = distance;
+              closestId = slug;
+            }
+          }
+        });
+
+        if (closestId) {
+          setSelected(closestId);
+        }
+      }, 50);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, [tocItems]);
 
   if (!toc || !toc.length) return null;
 
