@@ -1,6 +1,4 @@
-import { useRouter } from 'next/router';
-import React, { useState } from 'react';
-import Scrollspy from 'react-scrollspy';
+import React, { useEffect, useRef, useState } from 'react';
 import { twMerge } from 'tailwind-merge';
 
 import ArrowRight from './icons/ArrowRight';
@@ -26,11 +24,13 @@ interface ITOCProps {
  * @param {string} props.contentSelector - The content selector
  * @param {number} props.depth - The depth of the table of contents
  */
-export default function TOC({ className, cssBreakingPoint = 'xl', toc, contentSelector, depth = 2 }: ITOCProps) {
-  const router = useRouter();
+export default function TOC({ className, cssBreakingPoint = 'xl', toc, depth = 2 }: ITOCProps) {
   const [open, setOpen] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   if (!toc || !toc.length) return null;
+
   const minLevel = toc.reduce((mLevel, item) => (!mLevel || item.lvl < mLevel ? item.lvl : mLevel), 0);
 
   const tocItems = toc
@@ -38,10 +38,6 @@ export default function TOC({ className, cssBreakingPoint = 'xl', toc, contentSe
     .map((item) => ({
       ...item,
       content: item.content.replace(/[\s]?\{#[\w\d\-_]+\}$/, '').replace(/(<([^>]+)>)/gi, ''),
-      // For TOC rendering in specification files in the spec repo we have "a" tags added manually to the spec
-      // markdown document MDX takes these "a" tags and uses them to render the "id" for headers like
-      // a-namedefinitionsapplicationaapplication slugWithATag contains transformed heading name that is later used
-      // for scroll spy identification
       slugWithATag: (() => {
         const base = item.content
           .replace(/[<>?!:`'."\\/=@#$%^&*()[\]{}+,;]/gi, '')
@@ -55,6 +51,47 @@ export default function TOC({ className, cssBreakingPoint = 'xl', toc, contentSe
         return base;
       })()
     }));
+
+  // Scroll tracking with debouncing for stable highlighting
+  useEffect(() => {
+    const handleScroll = () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+
+      scrollTimeoutRef.current = setTimeout(() => {
+        const STICKY_OFFSET = 120;
+        const headingIds = tocItems.map((item) => item.slug ? item.slug : item.slugWithATag);
+        let closestId: string | null = null;
+        let closestDistance = Infinity;
+
+        headingIds.forEach((id) => {
+          const element = document.getElementById(id);
+          if (element) {
+            const rect = element.getBoundingClientRect();
+            const distance = Math.abs(rect.top - STICKY_OFFSET);
+
+            if (distance < closestDistance) {
+              closestDistance = distance;
+              closestId = id;
+            }
+          }
+        });
+
+        if (closestId) {
+          setActiveId(closestId);
+        }
+      }, 50);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, [tocItems]);
 
   return (
     <div
@@ -88,18 +125,13 @@ export default function TOC({ className, cssBreakingPoint = 'xl', toc, contentSe
         </div>
       </div>
       <div className={`${!open && 'hidden'} ${cssBreakingPoint === 'xl' ? 'xl:block' : 'lg:block'}`}>
-        <Scrollspy
-          key={router.pathname}
-          items={tocItems.map((item) => (item.slug ? item.slug : item.slugWithATag))}
-          currentClassName='text-primary-500 font-bold'
-          componentTag='div'
-          rootEl={contentSelector}
-          offset={-120}
-        >
+        <div>
           {tocItems.map((item, index) => (
             <a
               className={`pl-${2 ** (item.lvl - 1)} font-normal mb-1 block font-sans text-sm 
-                  text-gray-900 antialiased transition duration-100 ease-in-out hover:underline`}
+                  text-gray-900 antialiased transition duration-100 ease-in-out hover:underline ${
+                activeId === (item.slug ? item.slug : item.slugWithATag) ? 'text-primary-500 font-bold' : ''
+              }`}
               href={`#${item.slug ? item.slug : item.slugWithATag}`}
               key={index}
               data-testid='TOC-Link'
@@ -107,7 +139,7 @@ export default function TOC({ className, cssBreakingPoint = 'xl', toc, contentSe
               {item.content.replaceAll('`', '')}
             </a>
           ))}
-        </Scrollspy>
+        </div>
       </div>
     </div>
   );
